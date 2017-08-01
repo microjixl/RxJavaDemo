@@ -1,4 +1,5 @@
 <resources>
     <string name="app_name">RxJavaDemo</string>
     <string name="action_settings">设置</string>
+    <string name="throttle_first">throttleFirst</string>
 </resources>

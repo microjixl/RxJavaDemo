@@ -1,14 +1,12 @@
 package com.mj.demo.rxjava;
 
 import android.os.Bundle;
-import android.support.design.widget.FloatingActionButton;
-import android.support.design.widget.Snackbar;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
-import android.view.View;
+import android.widget.Button;
 import android.widget.TextView;
 
 import java.util.concurrent.TimeUnit;
@@ -18,17 +16,20 @@ import butterknife.Bind;
 import butterknife.ButterKnife;
 import io.reactivex.Observable;
 import io.reactivex.ObservableEmitter;
-import io.reactivex.Observer;
 import io.reactivex.android.schedulers.AndroidSchedulers;
-import io.reactivex.annotations.NonNull;
 import io.reactivex.disposables.Disposable;
-import io.reactivex.functions.Consumer;
 import io.reactivex.schedulers.Schedulers;
 
 public class MainActivity extends AppCompatActivity {
     AtomicInteger id = new AtomicInteger();
     @Bind(R.id.info)
     TextView info;
+    @Bind(R.id.toolbar)
+    Toolbar toolbar;
+    @Bind(R.id.button)
+    Button button;
+
+    private int i = 1;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -38,7 +39,8 @@ public class MainActivity extends AppCompatActivity {
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
         buildThrottleFirst();
-
+        buildDebounce();
+        button.setOnClickListener(v -> emitter.onNext(i++));
     }
 
     @Override
@@ -78,36 +80,55 @@ public class MainActivity extends AppCompatActivity {
     }
 
     Disposable disposable = null;
+
     private void disposableTest() {
-        /*disposable = */
-        makeJob()
-                .subscribeOn(AndroidSchedulers.mainThread())
-                .observeOn(AndroidSchedulers.mainThread())
-                .timeout(4, TimeUnit.SECONDS)
-                .doAfterNext(o -> printLog("doAfterNext:" + o.toString()))
-                .doOnNext(o -> printLog("doOnNext:" + o.toString()))
-                .doOnSubscribe(o -> printLog("doOnSubscribe:" + o.toString()))
-                .subscribe(new Observer<Object>() {
-                    @Override
-                    public void onSubscribe(@NonNull Disposable d) {
-                        disposable = d;
-                    }
-
-                    @Override
-                    public void onNext(@NonNull Object o) {
-                        printLog("onNext:" + o.toString());
-                    }
-
-                    @Override
-                    public void onError(@NonNull Throwable e) {
-                        printLog("onError:" + e.toString());
-                    }
-
-                    @Override
-                    public void onComplete() {
-
-                    }
-                });
+        disposable =
+//        Observable.never().timeout(2,TimeUnit.SECONDS).mergeWith(makeJob()).take(1)
+                makeJob()
+                        .timeout(2, TimeUnit.SECONDS)
+                        .doOnLifecycle(disposable1 -> printLog("doOnLifecycle subscribe:"), () -> printLog("doOnLifecycle onDisposable:"))
+                        .doAfterNext(o -> printLog("doAfterNext:" + o.toString()))
+                        .subscribeOn(Schedulers.io())
+                        .observeOn(AndroidSchedulers.mainThread())
+                        .filter(o -> {
+                            printLog("filter:" + o.toString());
+                            return true;
+                        })
+                        .doOnNext(o -> printLog("doOnNext:" + o.toString()))
+                        .observeOn(Schedulers.io())
+                        .doOnComplete(() -> printLog("doOnComplete"))
+                        .observeOn(AndroidSchedulers.mainThread())
+                        .subscribeOn(Schedulers.computation())
+                        .doOnSubscribe(o -> printLog("doOnSubscribe:" + o.toString()))
+                        .subscribe(o -> printLog("onNext:" + o.toString())
+                                , throwable -> printLog("onError:" + throwable.toString())
+                                , () -> {
+                                    printLog("onComplete");
+                                    printLog("isDisposed:" + disposable.isDisposed());
+                                    disposable.dispose();
+                                });
+//                .subscribe(new Observer<Object>() {
+//                    @Override
+//                    public void onSubscribe(@NonNull Disposable d) {
+//                        printLog("onSubscribe:");
+//                        disposable = d;
+//                    }
+//
+//                    @Override
+//                    public void onNext(@NonNull Object o) {
+//                        printLog("onNext:" + o.toString());
+//                    }
+//
+//                    @Override
+//                    public void onError(@NonNull Throwable e) {
+//                        printLog("onError:" + e.toString());
+//                    }
+//
+//                    @Override
+//                    public void onComplete() {
+//                        disposable.dispose();
+//                    }
+//                });
         printLog("isDisposed:" + disposable.isDisposed());
     }
 
@@ -163,10 +184,10 @@ public class MainActivity extends AppCompatActivity {
 
     private void buildThrottleFirst() {
         Observable.create(e -> emitter = e)
-                .throttleFirst(2, TimeUnit.SECONDS)
+                .throttleFirst(1, TimeUnit.SECONDS)
                 .subscribeOn(Schedulers.computation())
                 .observeOn(AndroidSchedulers.mainThread())
-                .subscribe(this::printLog);
+                .subscribe(o -> printLog("buildThrottleFirst:" + o));
     }
 
     private void buildDebounce() {
